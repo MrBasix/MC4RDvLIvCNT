@@ -1,0 +1,74 @@
+# Import required libraries
+import numpy as np
+import pandas as pd
+import statsmodels.api as sm
+import statsmodels.formula.api as smf
+
+# Set the parameters for the simulation
+n_simulations = 1000
+sample_size_per_group = 20  # Sample size per group for demonstration
+alpha = 0.05
+n_significant = 0
+n_weeks = 5  # Number of weeks in the second phase
+dropout_rate = 0.2  # Assuming 20% dropout rate
+
+# Main loop to run simulations
+for sim in range(n_simulations):
+    ids = []
+    weights = []
+    groups = []
+    times = []
+
+    # Simulate for each subject
+    for subject_id in range(1, sample_size_per_group * 3 + 1):
+        
+        # Simulate initial 10-week weight loss (Time 1)
+        initial_weight = np.random.normal(loc=-5, scale=1)
+        
+        # Determine group and simulate weight change for the second phase (Time 2)
+        for week in range(n_weeks):
+            if subject_id <= sample_size_per_group:
+                group = 'Control'
+                week_weight = initial_weight + np.random.normal(loc=3, scale=1)
+            elif subject_id <= 2 * sample_size_per_group:
+                group = 'Exp'
+                week_weight = initial_weight + np.random.normal(loc=4, scale=1)
+            else:
+                group = 'Rev'
+                week_weight = initial_weight + np.random.normal(loc=2.5, scale=1)
+            
+            # Store data
+            ids.append(subject_id)
+            groups.append(group)
+            times.append(week + 2)  # Time starts from 2 because 1 is for the initial phase
+            weights.append(week_weight)
+
+    # Create a DataFrame
+    df = pd.DataFrame({
+        'ID': ids,
+        'Group': groups,
+        'Time': times,
+        'WeightChange': weights
+    })
+
+    # Simulate dropouts
+    n_total = sample_size_per_group * 3
+    n_dropouts = int(n_total * dropout_rate)
+    dropout_ids = np.random.choice(np.unique(ids), size=n_dropouts, replace=False)
+
+    # Filter out the dropouts
+    df = df[~df['ID'].isin(dropout_ids)]
+
+    # Create a mixed-effects model that includes time
+    model = smf.mixedlm("WeightChange ~ C(Group, Treatment(reference='Control')) * Time", df, groups=df["ID"])
+    result = model.fit()
+
+    # Check if the main effects (Group, Time) or interaction (Group:Time) are significant
+    if any(p < alpha for p in result.pvalues[['C(Group, Treatment(reference=\'Control\'))[T.Exp]', 'C(Group, Treatment(reference=\'Control\'))[T.Rev]', 'Time', 'C(Group, Treatment(reference=\'Control\'))[T.Exp]:Time', 'C(Group, Treatment(reference=\'Control\'))[T.Rev]:Time']].values):
+        n_significant += 1
+
+# Calculate empirical power
+empirical_power = n_significant / n_simulations
+
+# Output the empirical power
+print(f'Empirical Power: {empirical_power}')
